@@ -169,11 +169,8 @@ func (s *SObject) Update() *SObject {
 		return nil
 	}
 
-	queryBase := "sobjects/"
-	if s.client().useToolingAPI {
-		queryBase = "tooling/sobjects/"
-	}
-	url := s.client().makeURL(queryBase + s.Type() + "/" + s.ID())
+	url := s.client().makeURL("sobjects/" + s.Type() + "/" + s.ID())
+
 	respData, err := s.client().httpRequest(http.MethodPatch, url, bytes.NewReader(reqData))
 	if err != nil {
 		log.Println(logPrefix, "failed to process http request,", err)
