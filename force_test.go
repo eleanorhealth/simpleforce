@@ -1,143 +1,73 @@
 package simpleforce
 
-// import (
-// 	"log"
-// 	"net/http"
-// 	"os"
-// 	"strings"
-// 	"testing"
-// )
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
-// var (
-// 	sfUser  = os.ExpandEnv("${SF_USER}")
-// 	sfPass  = os.ExpandEnv("${SF_PASS}")
-// 	sfToken = os.ExpandEnv("${SF_TOKEN}")
-// 	sfURL   = func() string {
-// 		if os.ExpandEnv("${SF_URL}") != "" {
-// 			return os.ExpandEnv("${SF_URL}")
-// 		} else {
-// 			return DefaultURL
-// 		}
-// 	}()
-// )
+	"github.com/stretchr/testify/assert"
+)
 
-// func checkCredentialsAndSkip(t *testing.T) {
-// 	if sfUser == "" || sfPass == "" {
-// 		log.Println(logPrefix, "SF_USER, SF_PASS environment variables are not set.")
-// 		t.Skip()
-// 	}
-// }
+func TestHTTPClient_Query(t *testing.T) {
+	assert := assert.New(t)
 
-// func requireClient(t *testing.T, skippable bool) *HTTPClient {
-// 	if skippable {
-// 		checkCredentialsAndSkip(t)
-// 	}
+	query := "SELECT Id FROM Account"
+	var res *QueryResult
 
-// 	client := NewHTTPClient(http.DefaultClient, sfURL, DefaultClientID, DefaultAPIVersion)
-// 	if client == nil {
-// 		t.Fail()
-// 	}
-// 	err := client.Login(sfUser, sfPass, sfToken)
-// 	if err != nil {
-// 		t.Fatal()
-// 	}
-// 	return client
-// }
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodGet)
+		assert.Equal(query, r.URL.Query().Get("q"))
 
-// func TestClient_LoginPassword(t *testing.T) {
-// 	checkCredentialsAndSkip(t)
+		err := json.NewEncoder(w).Encode(res)
+		assert.NoError(err)
+	}))
 
-// 	client := NewHTTPClient(http.DefaultClient, sfURL, DefaultClientID, DefaultAPIVersion)
-// 	if client == nil {
-// 		t.Fatal()
-// 	}
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-// 	// Use token
-// 	err := client.Login(sfUser, sfPass, sfToken)
-// 	if err != nil {
-// 		t.Fail()
-// 	} else {
-// 		log.Println(logPrefix, "sessionID:", client.sessionID)
-// 	}
+	sObj := SObject{
+		"Foo": "bar",
+	}
+	sObj.setClient(client)
 
-// 	err = client.Login("__INVALID_USER__", "__INVALID_PASS__", "__INVALID_TOKEN__")
-// 	if err == nil {
-// 		t.Fail()
-// 	}
-// }
+	res = &QueryResult{
+		Records: []SObject{sObj},
+	}
 
-// func TestClient_LoginPasswordNoToken(t *testing.T) {
-// 	checkCredentialsAndSkip(t)
+	actualRes, err := client.Query(query, "")
+	assert.NoError(err)
+	assert.Equal(res, actualRes)
+}
 
-// 	client := NewHTTPClient(http.DefaultClient, sfURL, DefaultClientID, DefaultAPIVersion)
-// 	if client == nil {
-// 		t.Fatal()
-// 	}
+func TestHTTPClient_Query_nextRecordsURL(t *testing.T) {
+	assert := assert.New(t)
 
-// 	// Trusted IP must be configured AND the request must be initiated from the trusted IP range.
-// 	err := client.Login(sfUser, sfPass, "")
-// 	if err != nil {
-// 		t.FailNow()
-// 	} else {
-// 		log.Println(logPrefix, "sessionID:", client.sessionID)
-// 	}
-// }
+	query := "SELECT Id FROM Account"
+	nextRecordsURL := "/foo/bar"
+	var res *QueryResult
 
-// func TestClient_Query(t *testing.T) {
-// 	client := requireClient(t, true)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodGet)
+		assert.False(r.URL.Query().Has("q"))
+		assert.Equal(nextRecordsURL, r.URL.Path)
 
-// 	q := "SELECT Id,LastModifiedById,LastModifiedDate,ParentId,CommentBody FROM CaseComment"
-// 	result, err := client.Query(q)
-// 	if err != nil {
-// 		log.Println(logPrefix, "query failed,", err)
-// 		t.FailNow()
-// 	}
+		err := json.NewEncoder(w).Encode(res)
+		assert.NoError(err)
+	}))
 
-// 	log.Println(logPrefix, result.TotalSize, result.Done, result.NextRecordsURL)
-// 	if result.TotalSize < 1 {
-// 		log.Println(logPrefix, "no records returned.")
-// 		t.FailNow()
-// 	}
-// 	for _, record := range result.Records {
-// 		if record.Type() != "CaseComment" {
-// 			t.Fail()
-// 		}
-// 	}
-// }
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-// func TestClient_Query2(t *testing.T) {
-// 	client := requireClient(t, true)
+	sObj := SObject{
+		"Foo": "bar",
+	}
+	sObj.setClient(client)
 
-// 	q := "Select+id,createdbyid,parentid,parent.casenumber,parent.subject,createdby.name,createdby.alias+from+casecomment"
-// 	result, err := client.Query(q)
-// 	if err != nil {
-// 		t.FailNow()
-// 	}
-// 	if len(result.Records) > 0 {
-// 		comment1 := &result.Records[0]
-// 		case1 := comment1.SObjectField("Case", "Parent").Get()
-// 		if comment1.StringField("ParentId") != case1.ID() {
-// 			t.Fail()
-// 		}
-// 	}
-// }
+	res = &QueryResult{
+		NextRecordsURL: nextRecordsURL,
+		Records:        []SObject{sObj},
+	}
 
-// func TestClient_QueryLike(t *testing.T) {
-// 	client := requireClient(t, true)
-
-// 	q := "Select Id, createdby.name, subject from case where subject like '%simpleforce%'"
-// 	result, err := client.Query(q)
-// 	if err != nil {
-// 		t.FailNow()
-// 	}
-// 	if len(result.Records) > 0 {
-// 		case0 := &result.Records[0]
-// 		if !strings.Contains(case0.StringField("Subject"), "simpleforce") {
-// 			t.FailNow()
-// 		}
-// 	}
-// }
-
-// func TestMain(m *testing.M) {
-// 	m.Run()
-// }
+	actualRes, err := client.Query(query, nextRecordsURL)
+	assert.NoError(err)
+	assert.Equal(res, actualRes)
+}

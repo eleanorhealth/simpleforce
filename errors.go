@@ -28,7 +28,7 @@ type xmlError struct {
 }
 
 //Need to get information out of this package.
-func ParseSalesforceError(statusCode int, responseBody []byte) (err error) {
+func parseSalesforceError(statusCode int, responseBody []byte) (err error) {
 	jsonError := jsonError{}
 	xmlError := xmlError{}
 	err = json.Unmarshal(responseBody, &jsonError)

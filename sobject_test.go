@@ -1,248 +1,243 @@
 package simpleforce
 
-// import (
-// 	"log"
-// 	"testing"
-// 	"time"
-// )
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
-// func TestSObject_AttributesField(t *testing.T) {
-// 	obj := &SObject{}
-// 	if obj.AttributesField() != nil {
-// 		t.Fail()
-// 	}
+	"github.com/stretchr/testify/assert"
+)
 
-// 	obj.setType("Case")
-// 	if obj.AttributesField().Type != "Case" {
-// 		t.Fail()
-// 	}
+func TestSObject_AttributesField(t *testing.T) {
+	obj := &SObject{}
+	if obj.AttributesField() != nil {
+		t.Fail()
+	}
 
-// 	obj.setType("")
-// 	if obj.AttributesField().Type != "" {
-// 		t.Fail()
-// 	}
-// }
+	obj.setType("Case")
+	if obj.AttributesField().Type != "Case" {
+		t.Fail()
+	}
 
-// func TestSObject_Type(t *testing.T) {
-// 	obj := &SObject{
-// 		sobjectAttributesKey: SObjectAttributes{Type: "Case"},
-// 	}
-// 	if obj.Type() != "Case" {
-// 		t.Fail()
-// 	}
+	obj.setType("")
+	if obj.AttributesField().Type != "" {
+		t.Fail()
+	}
+}
 
-// 	obj.setType("CaseComment")
-// 	if obj.Type() != "CaseComment" {
-// 		t.Fail()
-// 	}
-// }
+func TestSObject_Type(t *testing.T) {
+	obj := &SObject{
+		sobjectAttributesKey: SObjectAttributes{Type: "Case"},
+	}
+	if obj.Type() != "Case" {
+		t.Fail()
+	}
 
-// func TestSObject_InterfaceField(t *testing.T) {
-// 	obj := &SObject{}
-// 	if obj.InterfaceField("test_key") != nil {
-// 		t.Fail()
-// 	}
+	obj.setType("CaseComment")
+	if obj.Type() != "CaseComment" {
+		t.Fail()
+	}
+}
 
-// 	(*obj)["test_key"] = "hello"
-// 	if obj.InterfaceField("test_key") == nil {
-// 		t.Fail()
-// 	}
-// }
+func TestSObject_InterfaceField(t *testing.T) {
+	obj := &SObject{}
+	if obj.InterfaceField("test_key") != nil {
+		t.Fail()
+	}
 
-// func TestSObject_SObjectField(t *testing.T) {
-// 	obj := &SObject{
-// 		sobjectAttributesKey: SObjectAttributes{Type: "CaseComment"},
-// 		"ParentId":           "__PARENT_ID__",
-// 	}
+	(*obj)["test_key"] = "hello"
+	if obj.InterfaceField("test_key") == nil {
+		t.Fail()
+	}
+}
 
-// 	// Positive checks
-// 	caseObj := obj.SObjectField("Case", "ParentId")
-// 	if caseObj.Type() != "Case" {
-// 		log.Println("Type mismatch")
-// 		t.Fail()
-// 	}
-// 	if caseObj.StringField("Id") != "__PARENT_ID__" {
-// 		log.Println("ID mismatch")
-// 		t.Fail()
-// 	}
+func TestSObject_SObjectField(t *testing.T) {
+	obj := &SObject{
+		sobjectAttributesKey: SObjectAttributes{Type: "CaseComment"},
+		"ParentId":           "__PARENT_ID__",
+	}
 
-// 	// Negative checks
-// 	userObj := obj.SObjectField("User", "OwnerId")
-// 	if userObj != nil {
-// 		log.Println("Nil mismatch")
-// 		t.Fail()
-// 	}
-// }
+	// Positive checks
+	caseObj := obj.SObjectField("Case", "ParentId")
+	if caseObj.Type() != "Case" {
+		log.Println("Type mismatch")
+		t.Fail()
+	}
+	if caseObj.StringField("Id") != "__PARENT_ID__" {
+		log.Println("ID mismatch")
+		t.Fail()
+	}
 
-// func TestSObject_Describe(t *testing.T) {
-// 	client := requireClient(t, true)
-// 	meta := client.SObject("Case").Describe()
-// 	if meta == nil {
-// 		t.FailNow()
-// 	} else {
-// 		if (*meta)["name"].(string) != "Case" {
-// 			t.Fail()
-// 		}
-// 	}
-// }
+	// Negative checks
+	userObj := obj.SObjectField("User", "OwnerId")
+	if userObj != nil {
+		log.Println("Nil mismatch")
+		t.Fail()
+	}
+}
 
-// func TestSObject_Get(t *testing.T) {
-// 	client := requireClient(t, true)
+func TestSObject_Describe(t *testing.T) {
+	assert := assert.New(t)
 
-// 	// Search for a valid Case ID first.
-// 	queryResult, err := client.Query("SELECT Id,OwnerId,Subject FROM CASE")
-// 	if err != nil || queryResult == nil {
-// 		log.Println(logPrefix, "query failed,", err)
-// 		t.FailNow()
-// 	}
-// 	if queryResult.TotalSize < 1 {
-// 		t.FailNow()
-// 	}
-// 	oid := queryResult.Records[0].ID()
-// 	ownerID := queryResult.Records[0].StringField("OwnerId")
+	res := &SObjectMeta{
+		"name": "Case",
+	}
 
-// 	// Positive
-// 	obj := client.SObject("Case").Get(oid)
-// 	if obj.ID() != oid || obj.StringField("OwnerId") != ownerID {
-// 		t.Fail()
-// 	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodGet)
+		assert.Contains(r.URL.Path, "sobjects/Case/describe")
 
-// 	// Positive 2
-// 	obj = client.SObject("Case")
-// 	if obj.StringField("OwnerId") != "" {
-// 		t.Fail()
-// 	}
-// 	obj.setID(oid)
-// 	obj.Get()
-// 	if obj.ID() != oid || obj.StringField("OwnerId") != ownerID {
-// 		t.Fail()
-// 	}
+		err := json.NewEncoder(w).Encode(res)
+		assert.NoError(err)
+	}))
 
-// 	// Negative 1
-// 	obj = client.SObject("Case").Get("non-exist-id")
-// 	if obj != nil {
-// 		t.Fail()
-// 	}
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-// 	// Negative 2
-// 	obj = &SObject{}
-// 	if obj.Get() != nil {
-// 		t.Fail()
-// 	}
-// }
+	meta, err := client.SObject("Case").Describe()
+	assert.NoError(err)
+	assert.NotNil(meta)
 
-// func TestSObject_Create(t *testing.T) {
-// 	client := requireClient(t, true)
+	name := (*meta)["name"]
+	assert.Equal("Case", name)
+}
 
-// 	// Positive
-// 	case1 := client.SObject("Case")
-// 	case1Result := case1.Set("Subject", "Case created by simpleforce on "+time.Now().Format("2006/01/02 03:04:05")).
-// 		Set("Comments", "This case is created by simpleforce").
-// 		Create()
-// 	if case1Result == nil || case1Result.ID() == "" || case1Result.Type() != case1.Type() {
-// 		t.Fail()
-// 	} else {
-// 		log.Println(logPrefix, "Case created,", case1Result.Get().StringField("CaseNumber"))
-// 	}
+func TestSObject_Get(t *testing.T) {
+	assert := assert.New(t)
 
-// 	// Positive 2
-// 	caseComment1 := client.SObject("CaseComment")
-// 	caseComment1Result := caseComment1.Set("ParentId", case1Result.ID()).
-// 		Set("CommentBody", "This comment is created by simpleforce").
-// 		Set("IsPublished", true).
-// 		Create()
-// 	if caseComment1Result.Get().SObjectField("Case", "ParentId").ID() != case1Result.ID() {
-// 		t.Fail()
-// 	} else {
-// 		log.Println(logPrefix, "CaseComment created,", caseComment1Result.ID())
-// 	}
+	id := "object1"
+	ownerID := "owner1"
+	objType := "Case"
 
-// 	// Negative: object without type.
-// 	obj := client.SObject()
-// 	if obj.Create() != nil {
-// 		t.Fail()
-// 	}
+	sObj := &SObject{
+		"OwnerId": ownerID,
+		"attributes": SObjectAttributes{
+			Type: objType,
+		},
+	}
+	sObj.setID(id)
 
-// 	// Negative: object without client.
-// 	obj = &SObject{}
-// 	if obj.Create() != nil {
-// 		t.Fail()
-// 	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodGet)
+		assert.Contains(r.URL.Path, "sobjects/"+objType+"/"+id)
 
-// 	// Negative: Invalid type
-// 	obj = client.SObject("__SOME_INVALID_TYPE__")
-// 	if obj.Create() != nil {
-// 		t.Fail()
-// 	}
+		err := json.NewEncoder(w).Encode(sObj)
+		assert.NoError(err)
+	}))
 
-// 	// Negative: Invalid field
-// 	obj = client.SObject("Case").Set("__SOME_INVALID_FIELD__", "")
-// 	if obj.Create() != nil {
-// 		t.Fail()
-// 	}
-// }
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-// func TestSObject_Update(t *testing.T) {
-// 	client := requireClient(t, true)
+	sObj.setClient(client)
 
-// 	// Positive
-// 	if client.SObject("Case").
-// 		Set("Subject", "Case created by simpleforce on "+time.Now().Format("2006/01/02 03:04:05")).
-// 		Create().
-// 		Set("Subject", "Case subject updated by simpleforce").
-// 		Update().
-// 		Get().
-// 		StringField("Subject") != "Case subject updated by simpleforce" {
-// 		t.Fail()
-// 	}
-// }
+	sObj, err := sObj.Get()
+	assert.NoError(err)
+	assert.NotNil(sObj)
 
-// func TestSObject_Delete(t *testing.T) {
-// 	client := requireClient(t, true)
+	assert.Equal(ownerID, sObj.StringField("OwnerId"))
+	assert.Equal(objType, sObj.Type())
+}
 
-// 	// Positive: create a case first then delete it and verify if it is gone.
-// 	case1 := client.SObject("Case").
-// 		Set("Subject", "Case created by simpleforce on "+time.Now().Format("2006/01/02 03:04:05")).
-// 		Create().
-// 		Get()
-// 	if case1 == nil || case1.ID() == "" {
-// 		t.Fatal()
-// 	}
-// 	caseID := case1.ID()
-// 	if case1.Delete() != nil {
-// 		t.Fail()
-// 	}
-// 	case1 = client.SObject("Case").Get(caseID)
-// 	if case1 != nil {
-// 		t.Fail()
-// 	}
-// }
+func TestSObject_Create(t *testing.T) {
+	assert := assert.New(t)
 
-// // TestSObject_GetUpdate validates updating of existing records.
-// func TestSObject_GetUpdate(t *testing.T) {
-// 	client := requireClient(t, true)
+	id := "object1"
+	ownerID := "owner1"
+	objType := "Case"
 
-// 	// Create a new case first.
-// 	case1 := client.SObject("Case").
-// 		Set("Subject", "Original").
-// 		Create().
-// 		Get()
+	res := &createSObjectResponse{
+		ID:      id,
+		Success: true,
+	}
 
-// 	// Query the case by ID, then update the Subject.
-// 	case2 := client.SObject("Case").
-// 		Get(case1.ID()).
-// 		Set("Subject", "Updated").
-// 		Update().
-// 		Get()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodPost)
+		assert.Contains(r.URL.Path, "sobjects/"+objType)
 
-// 	// Query the case by ID again and check if the Subject has been updated.
-// 	case3 := client.SObject("Case").
-// 		Get(case2.ID())
+		err := json.NewEncoder(w).Encode(res)
+		assert.NoError(err)
+	}))
 
-// 	if case3.StringField("Subject") != "Updated" {
-// 		t.Fail()
-// 	}
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-// 	user1 := client.SObject("User").Create()
-// 	log.Println(user1.ID())
-// }
+	sObj := &SObject{
+		"OwnerId": ownerID,
+		"attributes": SObjectAttributes{
+			Type: objType,
+		},
+	}
+	sObj.setID(id)
+	sObj.setClient(client)
+
+	sObj, err := sObj.Create()
+	assert.NoError(err)
+	assert.NotNil(sObj)
+
+	assert.Equal(ownerID, sObj.StringField("OwnerId"))
+	assert.Equal(objType, sObj.Type())
+}
+
+func TestSObject_Update(t *testing.T) {
+	assert := assert.New(t)
+
+	id := "object1"
+	ownerID := "owner1"
+	objType := "Case"
+
+	sObj := &SObject{
+		"OwnerId": ownerID,
+		"attributes": SObjectAttributes{
+			Type: objType,
+		},
+	}
+	sObj.setID(id)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodPatch)
+		assert.Contains(r.URL.Path, "sobjects/"+objType+"/"+id)
+
+		o := &SObject{}
+		err := json.NewDecoder(r.Body).Decode(o)
+		assert.NoError(err)
+
+		assert.Equal(sObj.StringField("OwnerId"), o.StringField("OwnerId"))
+		assert.Equal("bar", o.StringField("Foo"))
+	}))
+
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
+
+	sObj.setClient(client)
+	sObj.Set("Foo", "bar")
+
+	err := sObj.Update()
+	assert.NoError(err)
+
+	assert.Equal(ownerID, sObj.StringField("OwnerId"))
+	assert.Equal(objType, sObj.Type())
+}
+
+func TestSObject_Delete(t *testing.T) {
+	assert := assert.New(t)
+
+	id := "object1"
+	objType := "Case"
+
+	sObj := &SObject{
+		"attributes": SObjectAttributes{
+			Type: objType,
+		},
+	}
+	sObj.setID(id)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(r.Method, http.MethodDelete)
+		assert.Contains(r.URL.Path, "sobjects/"+objType+"/"+id)
+	}))
+
+	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
+
+	sObj.setClient(client)
+
+	err := sObj.Delete()
+	assert.NoError(err)
+}
