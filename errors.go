@@ -27,7 +27,6 @@ type xmlError struct {
 	ErrorCode string `xml:"Body>Fault>faultcode"`
 }
 
-//Need to get information out of this package.
 func parseSalesforceError(statusCode int, responseBody []byte) (err error) {
 	jsonError := jsonError{}
 	xmlError := xmlError{}
