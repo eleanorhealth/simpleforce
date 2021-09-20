@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"log"
 
 	"github.com/pkg/errors"
 )
@@ -35,8 +34,6 @@ func parseSalesforceError(statusCode int, responseBody []byte) (err error) {
 		//Unable to parse json. Try xml
 		err = xml.Unmarshal(responseBody, &xmlError)
 		if err != nil {
-			//Unable to parse json or XML
-			log.Println("ERROR UNMARSHALLING: ", err)
 			return ErrFailure
 		}
 		//successfully parsed XML:

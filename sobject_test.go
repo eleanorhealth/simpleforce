@@ -169,7 +169,7 @@ func TestSObject_Create(t *testing.T) {
 	sObj.setID(id)
 	sObj.setClient(client)
 
-	sObj, err := sObj.Create()
+	sObj, err := sObj.Create(nil)
 	assert.NoError(err)
 	assert.NotNil(sObj)
 
@@ -209,7 +209,7 @@ func TestSObject_Update(t *testing.T) {
 	sObj.setClient(client)
 	sObj.Set("Foo", "bar")
 
-	err := sObj.Update()
+	err := sObj.Update(nil)
 	assert.NoError(err)
 
 	assert.Equal(ownerID, sObj.StringField("OwnerId"))

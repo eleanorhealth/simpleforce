@@ -122,13 +122,13 @@ type createSObjectResponse struct {
 // If the creation is successful, the ID of the SObject instance is updated with the ID returned. Otherwise, nil is
 // returned for failures.
 // Ref: https://developer.salesforce.com/docs/atlas.en-us.214.0.api_rest.meta/api_rest/dome_sobject_create.htm
-func (s *SObject) Create() (*SObject, error) {
+func (s *SObject) Create(blacklistedFields []string) (*SObject, error) {
 	if s.Type() == "" || s.client() == nil {
 		// Sanity check.
 		return nil, ErrFailure
 	}
 	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
-	reqObj := s.makeCopy()
+	reqObj := s.makeCopy(blacklistedFields)
 	reqData, err := json.Marshal(reqObj)
 	if err != nil {
 		return nil, err
@@ -160,14 +160,14 @@ func (s *SObject) Create() (*SObject, error) {
 
 // Update updates SObject in place.
 // ID is required.
-func (s *SObject) Update() error {
+func (s *SObject) Update(blacklistedFields []string) error {
 	if s.Type() == "" || s.client() == nil || s.ID() == "" {
 		return ErrFailure
 
 	}
 
 	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
-	reqObj := s.makeCopy()
+	reqObj := s.makeCopy(blacklistedFields)
 	reqData, err := json.Marshal(reqObj)
 	if err != nil {
 		return err
@@ -368,7 +368,7 @@ func (s *SObject) setID(id string) {
 }
 
 // makeCopy copies the fields of an SObject to a new map without metadata fields.
-func (s *SObject) makeCopy() map[string]interface{} {
+func (s *SObject) makeCopy(blacklistedFields []string) map[string]interface{} {
 	stripped := make(map[string]interface{})
 
 	for key, val := range *s {
@@ -381,6 +381,10 @@ func (s *SObject) makeCopy() map[string]interface{} {
 	}
 
 	for _, key := range blacklistedUpdateFields {
+		delete(stripped, key)
+	}
+
+	for _, key := range blacklistedFields {
 		delete(stripped, key)
 	}
 

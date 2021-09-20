@@ -122,7 +122,7 @@ func (h *HTTPClient) request(method, url string, body io.Reader, headers http.He
 		return nil, err
 	}
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			return nil, err
