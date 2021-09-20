@@ -30,7 +30,7 @@ go get github.com/eleanorhealth/simpleforce
 
 ### Setup the Client
 
-An `httpClient` instance is the main entrance to access Salesforce using simpleforce. Create an `httpClient` instance with the
+Create an `HTTPClient` instance with the
 `NewHTTPClient` function with an oauth2 configured HTTP client and the proper endpoint URL:
 
 ```go
