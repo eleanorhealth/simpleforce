@@ -19,10 +19,16 @@ const (
 )
 
 type Client interface {
+	Query(query, nextRecordsURL string) (*QueryResult, error)
+
+	DescribeSObject(sobj *SObject) (*SObjectMeta, error)
+	CreateSObject(sobj *SObject, blacklistedFields []string) error
+	GetSObject(sobj *SObject) error
+	UpdateSObject(sobj *SObject, blacklistedFields []string) error
+	DeleteSObject(sobj *SObject) error
+
 	DescribeGlobal() (*SObjectMeta, error)
 	DownloadFile(contentVersionID string, filepath string) error
-	Query(query, nextRecordsURL string) (*QueryResult, error)
-	SObject(typeName ...string) *SObject
 }
 
 var _ Client = (*HTTPClient)(nil)
@@ -48,10 +54,10 @@ func NewHTTPClient(httpClient *http.Client, baseURL, apiVersion string) *HTTPCli
 
 // QueryResult holds the response data from an SOQL query.
 type QueryResult struct {
-	TotalSize      int       `json:"totalSize"`
-	Done           bool      `json:"done"`
-	NextRecordsURL string    `json:"nextRecordsUrl"`
-	Records        []SObject `json:"records"`
+	TotalSize      int        `json:"totalSize"`
+	Done           bool       `json:"done"`
+	NextRecordsURL string     `json:"nextRecordsUrl"`
+	Records        []*SObject `json:"records"`
 }
 
 // Query runs an SOQL query. q could either be the SOQL string or the nextRecordsURL.
@@ -73,31 +79,163 @@ func (h *HTTPClient) Query(query, nextRecordsURL string) (*QueryResult, error) {
 	}
 	defer res.Body.Close()
 
-	var result QueryResult
+	result := &QueryResult{}
 
-	err = json.NewDecoder(res.Body).Decode(&result)
+	err = json.NewDecoder(res.Body).Decode(result)
 	if err != nil {
 		return nil, err
 	}
 
-	// Reference to client is needed if the object will be further used to execute queries.
-	for idx := range result.Records {
-		result.Records[idx].setClient(h)
-	}
-
-	return &result, nil
+	return result, nil
 }
 
-// SObject creates an SObject instance with provided type name and associate the SObject with the client.
-func (h *HTTPClient) SObject(typeName ...string) *SObject {
-	obj := &SObject{}
-	obj.setClient(h)
-
-	if typeName != nil {
-		obj.setType(typeName[0])
+// Describe queries the metadata of an SObject using the "describe" API.
+// Ref: https://developer.salesforce.com/docs/atlas.en-us.214.0.api_rest.meta/api_rest/resources_sobject_describe.htm
+func (h *HTTPClient) DescribeSObject(sobj *SObject) (*SObjectMeta, error) {
+	if sobj.Type() == "" {
+		return nil, ErrFailure
 	}
 
-	return obj
+	url := h.makeURL("sobjects/" + sobj.Type() + "/describe")
+
+	res, err := h.request(http.MethodGet, url, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var meta SObjectMeta
+	err = json.NewDecoder(res.Body).Decode(&meta)
+	if err != nil {
+		return nil, err
+	}
+
+	return &meta, nil
+}
+
+type createSObjectResponse struct {
+	ID      string `json:"id"`
+	Success bool   `json:"success"`
+}
+
+// Create posts the JSON representation of the SObject to salesforce to create the entry.
+// If the creation is successful, the ID of the SObject instance is updated with the ID returned. Otherwise, nil is
+// returned for failures.
+// Ref: https://developer.salesforce.com/docs/atlas.en-us.214.0.api_rest.meta/api_rest/dome_sobject_create.htm
+func (h *HTTPClient) CreateSObject(sobj *SObject, blacklistedFields []string) error {
+	if sobj.Type() == "" {
+		return ErrFailure
+	}
+
+	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
+	reqObj := sobj.makeCopy(blacklistedFields)
+	reqData, err := json.Marshal(reqObj)
+	if err != nil {
+		return err
+	}
+
+	url := h.makeURL("sobjects/" + sobj.Type() + "/")
+
+	res, err := h.request(http.MethodPost, url, bytes.NewReader(reqData), nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	var resData *createSObjectResponse
+
+	err = json.NewDecoder(res.Body).Decode(&resData)
+	if err != nil {
+		return err
+	}
+
+	if !resData.Success || resData.ID == "" {
+		return ErrFailure
+	}
+
+	sobj.SetID(resData.ID)
+
+	return nil
+}
+
+// Get retrieves all the data fields of an SObject. If id is provided, the SObject with the provided external ID will
+// be retrieved; otherwise, the existing ID of the SObject will be checked. If the SObject doesn't contain an ID field
+// and id is not provided as the parameter, nil is returned.
+// If query is successful, the SObject is updated in-place and exact same address is returned; otherwise, nil is
+// returned if failed.
+func (h *HTTPClient) GetSObject(sobj *SObject) error {
+	if len(sobj.Type()) == 0 {
+		return ErrFailure
+	}
+
+	if len(sobj.ID()) == 0 {
+		return ErrFailure
+	}
+
+	url := h.makeURL("sobjects/" + sobj.Type() + "/" + sobj.ID())
+
+	res, err := h.request(http.MethodGet, url, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	err = json.NewDecoder(res.Body).Decode(sobj)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Update updates SObject in place.
+// ID is required.
+func (h *HTTPClient) UpdateSObject(sobj *SObject, blacklistedFields []string) error {
+	if sobj.Type() == "" {
+		return ErrFailure
+	}
+
+	if sobj.ID() == "" {
+		return ErrFailure
+	}
+
+	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
+	reqObj := sobj.makeCopy(blacklistedFields)
+	reqData, err := json.Marshal(reqObj)
+	if err != nil {
+		return err
+	}
+
+	url := h.makeURL("sobjects/" + sobj.Type() + "/" + sobj.ID())
+
+	res, err := h.request(http.MethodPatch, url, bytes.NewReader(reqData), nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	return nil
+}
+
+// Delete deletes an SObject record identified by external ID. nil is returned if the operation completes successfully;
+// otherwise an error is returned
+func (h *HTTPClient) DeleteSObject(sobj *SObject) error {
+	if len(sobj.Type()) == 0 {
+		return ErrFailure
+	}
+
+	if len(sobj.ID()) == 0 {
+		return ErrFailure
+	}
+
+	url := h.makeURL("sobjects/" + sobj.Type() + "/" + sobj.ID())
+
+	_, err := h.request(http.MethodDelete, url, nil, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // httpRequest executes an HTTP request to the salesforce server and returns the response data in byte buffer.
