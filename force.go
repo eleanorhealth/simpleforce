@@ -60,7 +60,8 @@ type QueryResult struct {
 	Records        []*SObject `json:"records"`
 }
 
-// Query runs an SOQL query. q could either be the SOQL string or the nextRecordsURL.
+// Query runs an SOQL query.
+// nextRecordsURL is used for iterating paginated results.
 func (h *HTTPClient) Query(query, nextRecordsURL string) (*QueryResult, error) {
 	var path string
 
@@ -89,11 +90,11 @@ func (h *HTTPClient) Query(query, nextRecordsURL string) (*QueryResult, error) {
 	return result, nil
 }
 
-// Describe queries the metadata of an SObject using the "describe" API.
+// DescribeSObject queries the metadata of an SObject using the "describe" API.
 // Ref: https://developer.salesforce.com/docs/atlas.en-us.214.0.api_rest.meta/api_rest/resources_sobject_describe.htm
 func (h *HTTPClient) DescribeSObject(sobj *SObject) (*SObjectMeta, error) {
-	if sobj.Type() == "" {
-		return nil, ErrFailure
+	if len(sobj.Type()) == 0 {
+		return nil, ErrInvalidSObject{"Type is empty"}
 	}
 
 	url := h.makeURL("sobjects/" + sobj.Type() + "/describe")
@@ -118,16 +119,15 @@ type createSObjectResponse struct {
 	Success bool   `json:"success"`
 }
 
-// Create posts the JSON representation of the SObject to salesforce to create the entry.
-// If the creation is successful, the ID of the SObject instance is updated with the ID returned. Otherwise, nil is
-// returned for failures.
+// CreateSObject POSTs the JSON representation of the SObject to salesforce to create the entry.
+// If the creation is successful, the ID of the SObject instance is updated with the ID returned.
 // Ref: https://developer.salesforce.com/docs/atlas.en-us.214.0.api_rest.meta/api_rest/dome_sobject_create.htm
 func (h *HTTPClient) CreateSObject(sobj *SObject, blacklistedFields []string) error {
-	if sobj.Type() == "" {
-		return ErrFailure
+	if len(sobj.Type()) == 0 {
+		return ErrInvalidSObject{"Type is empty"}
 	}
 
-	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
+	// Make a copy of the incoming SObject, skipping certain metadata fields as they're not understood by salesforce.
 	reqObj := sobj.makeCopy(blacklistedFields)
 	reqData, err := json.Marshal(reqObj)
 	if err != nil {
@@ -158,18 +158,14 @@ func (h *HTTPClient) CreateSObject(sobj *SObject, blacklistedFields []string) er
 	return nil
 }
 
-// Get retrieves all the data fields of an SObject. If id is provided, the SObject with the provided external ID will
-// be retrieved; otherwise, the existing ID of the SObject will be checked. If the SObject doesn't contain an ID field
-// and id is not provided as the parameter, nil is returned.
-// If query is successful, the SObject is updated in-place and exact same address is returned; otherwise, nil is
-// returned if failed.
+// GetSObject retrieves all the data fields of an SObject.
 func (h *HTTPClient) GetSObject(sobj *SObject) error {
 	if len(sobj.Type()) == 0 {
-		return ErrFailure
+		return ErrInvalidSObject{"Type is empty"}
 	}
 
 	if len(sobj.ID()) == 0 {
-		return ErrFailure
+		return ErrInvalidSObject{"Id is empty"}
 	}
 
 	url := h.makeURL("sobjects/" + sobj.Type() + "/" + sobj.ID())
@@ -188,15 +184,14 @@ func (h *HTTPClient) GetSObject(sobj *SObject) error {
 	return nil
 }
 
-// Update updates SObject in place.
-// ID is required.
+// UpdateSObject updates SObject in place.
 func (h *HTTPClient) UpdateSObject(sobj *SObject, blacklistedFields []string) error {
-	if sobj.Type() == "" {
-		return ErrFailure
+	if len(sobj.Type()) == 0 {
+		return ErrInvalidSObject{"Type is empty"}
 	}
 
-	if sobj.ID() == "" {
-		return ErrFailure
+	if len(sobj.ID()) == 0 {
+		return ErrInvalidSObject{"Id is empty"}
 	}
 
 	// Make a copy of the incoming SObject, but skip certain metadata fields as they're not understood by salesforce.
@@ -217,15 +212,14 @@ func (h *HTTPClient) UpdateSObject(sobj *SObject, blacklistedFields []string) er
 	return nil
 }
 
-// Delete deletes an SObject record identified by external ID. nil is returned if the operation completes successfully;
-// otherwise an error is returned
+// DeleteSObject deletes an SObject record.
 func (h *HTTPClient) DeleteSObject(sobj *SObject) error {
 	if len(sobj.Type()) == 0 {
-		return ErrFailure
+		return ErrInvalidSObject{"Type is empty"}
 	}
 
 	if len(sobj.ID()) == 0 {
-		return ErrFailure
+		return ErrInvalidSObject{"Id is empty"}
 	}
 
 	url := h.makeURL("sobjects/" + sobj.Type() + "/" + sobj.ID())
@@ -238,7 +232,7 @@ func (h *HTTPClient) DeleteSObject(sobj *SObject) error {
 	return nil
 }
 
-// httpRequest executes an HTTP request to the salesforce server and returns the response data in byte buffer.
+// httpRequest executes an HTTP request to the salesforce server and returns the HTTP response.
 func (h *HTTPClient) request(method, url string, body io.Reader, headers http.Header) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -276,7 +270,7 @@ func (h *HTTPClient) request(method, url string, body io.Reader, headers http.He
 	return res, nil
 }
 
-// makeURL generates a REST API URL based on baseURL, APIVersion of the client.
+// makeURL generates a REST API URL based on baseURL and APIVersion of the client.
 func (h *HTTPClient) makeURL(url string) string {
 	return fmt.Sprintf("%s/services/data/%s/%s", h.baseURL, h.apiVersion, url)
 }
@@ -307,7 +301,7 @@ func (h *HTTPClient) DownloadFile(contentVersionID string, filepath string) erro
 	return err
 }
 
-//Get the List of all available objects and their metadata for your organization's data
+// DescribeGlobal lists all available objects and their metadata.
 func (h *HTTPClient) DescribeGlobal() (*SObjectMeta, error) {
 	path := fmt.Sprintf("/services/data/%s/sobjects", h.apiVersion)
 	url := fmt.Sprintf("%s%s", h.baseURL, path)
