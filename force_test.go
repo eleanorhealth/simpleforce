@@ -199,11 +199,11 @@ func TestHTTPClient_Upsert(t *testing.T) {
 	objType := "Case"
 
 	idField := "Baz"
+	idValue := "cat"
 
 	sobj := NewSObject(objType).
 		Set("OwnerId", ownerID).
-		Set("Foo", "bar").
-		Set(idField, "cat")
+		Set("Foo", "bar")
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(r.Method, http.MethodPatch)
@@ -212,7 +212,7 @@ func TestHTTPClient_Upsert(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(o)
 		assert.NoError(err)
 
-		assert.Contains(r.URL.Path, "sobjects/"+objType+"/"+idField+"/"+o.StringField(idField))
+		assert.Contains(r.URL.Path, "sobjects/"+objType+"/"+idField+"/"+idValue)
 
 		assert.Equal(sobj.StringField("OwnerId"), o.StringField("OwnerId"))
 		assert.Equal("bar", o.StringField("Foo"))
@@ -220,7 +220,7 @@ func TestHTTPClient_Upsert(t *testing.T) {
 
 	client := NewHTTPClient(ts.Client(), ts.URL, DefaultAPIVersion)
 
-	err := client.UpsertSObject(sobj, idField, nil)
+	err := client.UpsertSObject(sobj, idField, idValue, nil)
 	assert.NoError(err)
 
 	assert.Equal(ownerID, sobj.StringField("OwnerId"))

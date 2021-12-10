@@ -25,7 +25,7 @@ type Client interface {
 	CreateSObject(sobj *SObject, blacklistedFields []string) error
 	GetSObject(sobj *SObject) error
 	UpdateSObject(sobj *SObject, blacklistedFields []string) error
-	UpsertSObject(sobject *SObject, idField string, blacklistedFields []string) error
+	UpsertSObject(sobject *SObject, idField, idValue string, blacklistedFields []string) error
 	DeleteSObject(sobj *SObject) error
 
 	DescribeGlobal() (*SObjectMeta, error)
@@ -214,7 +214,7 @@ func (h *HTTPClient) UpdateSObject(sobj *SObject, blacklistedFields []string) er
 }
 
 // UpsertSObject upserts SObject.
-func (h *HTTPClient) UpsertSObject(sobj *SObject, idField string, blacklistedFields []string) error {
+func (h *HTTPClient) UpsertSObject(sobj *SObject, idField, idValue string, blacklistedFields []string) error {
 	if len(sobj.Type()) == 0 {
 		return ErrInvalidSObject{"Type is empty"}
 	}
@@ -226,7 +226,7 @@ func (h *HTTPClient) UpsertSObject(sobj *SObject, idField string, blacklistedFie
 		return err
 	}
 
-	url := h.makeURL("sobjects/" + sobj.Type() + "/" + idField + "/" + sobj.StringField(idField))
+	url := h.makeURL("sobjects/" + sobj.Type() + "/" + idField + "/" + idValue)
 
 	res, err := h.request(http.MethodPatch, url, bytes.NewReader(reqData), nil)
 	if err != nil {
